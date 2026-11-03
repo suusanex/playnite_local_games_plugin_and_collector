@@ -92,7 +92,7 @@ implementation_intent:
 
 ## Execution Result
 
-- Final verdict: Pending
+- Final verdict: REVIEW_COMPLETE
 - Production / tests / docs changed: Yes
 - Unresolved findings: 0
 - Human-required work: Playnite が起動中のため、画面上のタイトル、カバー、リンク、タグ維持は未確認
@@ -106,12 +106,12 @@ implementation_intent:
 
 ### Git Result
 
-- Git outcome: Pending
-- Commit:
+- Git outcome: COMMITTED_AND_PUSHED
+- Commit: 0bf81a833f0d0f1568e5f578379c5ce305b9e857
 - Remote PR head before commit / push: 1d6947eeb24717649d3cde77ded4cced1938a142
-- Verified push destination repository / branch:
-- Remote PR head repository / branch / OID after push:
-- Unrelated local changes excluded: issue-1-plan.md、.tmp-read、生成カタログ
+- Verified push destination repository / branch: suusanex/playnite_local_games_plugin_and_collector / openclaw/issue-1-3
+- Remote PR head repository / branch / OID after push: push 後に PR head がこの記録用 commit と一致することを確認する
+- Unrelated local changes excluded: issue-1-plan.md、.tmp-read、review-context、pr-diff.patch、生成カタログ
 
 ## Uncollected / Unverified
 
