@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using LocalGameCatalog.Core;
@@ -87,6 +88,7 @@ internal static class CollectorApp
 
         var succeeded = new Dictionary<string, CatalogGame>(StringComparer.Ordinal);
         var failed = new HashSet<string>(StringComparer.Ordinal);
+        var pendingCovers = new List<PendingCover>();
         foreach (var productId in requestedIds)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -95,7 +97,7 @@ internal static class CollectorApp
             {
                 result = await fetcher.FetchAsync(productId, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception exception) when (exception is HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
+            catch (Exception exception) when (exception is HttpRequestException or IOException or InvalidDataException or TaskCanceledException or JsonException)
             {
                 result = new DlsiteFetchResult { Error = exception.Message };
             }
@@ -109,7 +111,7 @@ internal static class CollectorApp
 
             try
             {
-                succeeded[CatalogIds.Create("dlsite", productId)] = CreateRecord(output, result);
+                succeeded[CatalogIds.Create("dlsite", productId)] = CreateRecord(output, result, pendingCovers);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
             {
@@ -126,7 +128,18 @@ internal static class CollectorApp
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
         {
+            DiscardCovers(pendingCovers);
             stderr.WriteLine("ERROR catalog write failed: " + exception.Message);
+            return 2;
+        }
+
+        try
+        {
+            CommitCovers(pendingCovers);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            stderr.WriteLine("ERROR cover commit failed: " + exception.Message);
             return 2;
         }
 
@@ -135,7 +148,7 @@ internal static class CollectorApp
         return failureCount == 0 ? 0 : 1;
     }
 
-    private static CatalogGame CreateRecord(string catalogPath, DlsiteFetchResult result)
+    private static CatalogGame CreateRecord(string catalogPath, DlsiteFetchResult result, List<PendingCover> pendingCovers)
     {
         var product = result.Product ?? throw new InvalidDataException("Product is missing.");
         var coverImage = "";
@@ -143,8 +156,16 @@ internal static class CollectorApp
         {
             coverImage = CatalogPaths.CoverRelativePath("dlsite", product.WorkNo, result.CoverExtension ?? "jpg");
             var fullPath = CatalogPaths.ResolveCover(catalogPath, coverImage);
-            WriteBytesAtomic(fullPath, result.CoverBytes);
-            RemoveOtherCovers(fullPath);
+            // JSONL の置換に失敗したとき既存カバーを消さないよう、確定までは別ファイルへ書く。
+            var stagingPath = fullPath + ".new";
+            var directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.WriteAllBytes(stagingPath, result.CoverBytes);
+            pendingCovers.Add(new PendingCover(fullPath, stagingPath));
         }
 
         return new CatalogGame
@@ -161,23 +182,44 @@ internal static class CollectorApp
         };
     }
 
-    private static void WriteBytesAtomic(string path, byte[] bytes)
+    private sealed class PendingCover
     {
-        var directory = Path.GetDirectoryName(path);
-        if (!string.IsNullOrEmpty(directory))
+        public PendingCover(string finalPath, string stagingPath)
         {
-            Directory.CreateDirectory(directory);
+            FinalPath = finalPath;
+            StagingPath = stagingPath;
         }
 
-        var temporary = path + ".tmp";
-        File.WriteAllBytes(temporary, bytes);
-        if (File.Exists(path))
+        public string FinalPath { get; }
+
+        public string StagingPath { get; }
+    }
+
+    private static void CommitCovers(List<PendingCover> pendingCovers)
+    {
+        foreach (var cover in pendingCovers)
         {
-            File.Replace(temporary, path, null);
+            if (File.Exists(cover.FinalPath))
+            {
+                File.Replace(cover.StagingPath, cover.FinalPath, null);
+            }
+            else
+            {
+                File.Move(cover.StagingPath, cover.FinalPath);
+            }
+
+            RemoveOtherCovers(cover.FinalPath);
         }
-        else
+    }
+
+    private static void DiscardCovers(List<PendingCover> pendingCovers)
+    {
+        foreach (var cover in pendingCovers)
         {
-            File.Move(temporary, path);
+            if (File.Exists(cover.StagingPath))
+            {
+                File.Delete(cover.StagingPath);
+            }
         }
     }
 

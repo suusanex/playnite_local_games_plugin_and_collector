@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace LocalGameCatalog.Core
 {
@@ -128,17 +129,12 @@ namespace LocalGameCatalog.Core
 
         private static bool IsReleaseDate(string value)
         {
-            return value.Length == 10 &&
-                char.IsDigit(value[0]) &&
-                char.IsDigit(value[1]) &&
-                char.IsDigit(value[2]) &&
-                char.IsDigit(value[3]) &&
-                value[4] == '-' &&
-                char.IsDigit(value[5]) &&
-                char.IsDigit(value[6]) &&
-                value[7] == '-' &&
-                char.IsDigit(value[8]) &&
-                char.IsDigit(value[9]);
+            return DateTime.TryParseExact(
+                value,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _);
         }
     }
 }

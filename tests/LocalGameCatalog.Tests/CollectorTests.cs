@@ -1,4 +1,6 @@
+using System.Text.Json;
 using DlsiteCollector;
+using LocalGameCatalog.Core;
 using Xunit;
 
 namespace LocalGameCatalog.Tests;
@@ -55,6 +57,18 @@ public class CollectorTests
         Assert.Equal("2023-03-23", product.ReleaseDate);
         Assert.Equal("https://img.example.test/cover.jpg", product.ImageUrl);
         Assert.Equal("https://www.dlsite.com/home/work/=/product_id/RJ01041722.html", product.ProductUrl);
+
+        Assert.False(DlsiteProductParser.TryParse("<html>not json</html>", "RJ01041722", "maniax", out _));
+
+        const string impossibleDate = """
+            [{
+              "workno": "RJ01041722",
+              "work_name": "サンプル",
+              "regist_date": "2024-02-31 00:00:00"
+            }]
+            """;
+        Assert.True(DlsiteProductParser.TryParse(impossibleDate, "RJ01041722", "home", out var undated));
+        Assert.Null(undated!.ReleaseDate);
     }
 
     [Fact]
@@ -102,12 +116,77 @@ public class CollectorTests
         Assert.Equal("{\"schemaVersion\":1}\n", await File.ReadAllTextAsync(output));
     }
 
+    [Fact]
+    public async Task MalformedFetchDoesNotAbortOtherProducts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "collector-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var input = Path.Combine(root, "input.csv");
+        var output = Path.Combine(root, "games.jsonl");
+        await File.WriteAllTextAsync(input, "key\nRJ01234567\nRJ07654321\n");
+        var fetcher = new FakeFetcher();
+        fetcher.ThrowJson.Add("RJ07654321");
+
+        var code = await CollectorApp.RunAsync(new[] { "--input", input, "--output", output }, fetcher, TextWriter.Null, new StringWriter(), CancellationToken.None);
+        var text = await File.ReadAllTextAsync(output);
+
+        Assert.Equal(1, code);
+        Assert.Contains("dlsite:RJ01234567", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("RJ07654321", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CatalogWriteFailureKeepsPreviousCover()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "collector-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var input = Path.Combine(root, "input.csv");
+        var output = Path.Combine(root, "games.jsonl");
+        await File.WriteAllTextAsync(input, "key\nRJ01234567\n");
+        var previous = new CatalogGame
+        {
+            SchemaVersion = 1,
+            Source = "dlsite",
+            SourceId = "RJ01234567",
+            Id = "dlsite:RJ01234567",
+            Name = "古い",
+            ProductUrl = "https://example.test/old",
+            CoverImage = "media/dlsite/RJ01234567/cover.png"
+        };
+        CatalogJsonl.WriteAtomic(output, new[] { previous });
+        var cover = Path.Combine(root, "media", "dlsite", "RJ01234567", "cover.png");
+        Directory.CreateDirectory(Path.GetDirectoryName(cover)!);
+        await File.WriteAllBytesAsync(cover, new byte[] { 9, 9, 9 });
+        var attributes = File.GetAttributes(output);
+        File.SetAttributes(output, attributes | FileAttributes.ReadOnly);
+        try
+        {
+            var fetcher = new FakeFetcher();
+            var code = await CollectorApp.RunAsync(new[] { "--input", input, "--output", output }, fetcher, TextWriter.Null, new StringWriter(), CancellationToken.None);
+            Assert.Equal(2, code);
+            Assert.Equal(new byte[] { 9, 9, 9 }, await File.ReadAllBytesAsync(cover));
+            Assert.False(File.Exists(Path.Combine(root, "media", "dlsite", "RJ01234567", "cover.jpg")));
+            Assert.False(File.Exists(Path.Combine(root, "media", "dlsite", "RJ01234567", "cover.jpg.new")));
+        }
+        finally
+        {
+            File.SetAttributes(output, attributes);
+        }
+    }
+
     private sealed class FakeFetcher : IDlsiteFetcher
     {
         public HashSet<string> Fail { get; } = new(StringComparer.Ordinal);
 
+        public HashSet<string> ThrowJson { get; } = new(StringComparer.Ordinal);
+
         public Task<DlsiteFetchResult> FetchAsync(string productId, CancellationToken cancellationToken)
         {
+            if (ThrowJson.Contains(productId))
+            {
+                throw new JsonException("malformed");
+            }
+
             if (Fail.Contains(productId))
             {
                 return Task.FromResult(new DlsiteFetchResult { Error = "simulated failure" });

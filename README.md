@@ -77,7 +77,7 @@ dotnet build src/LocalGameCatalog.PlaynitePlugin/LocalGameCatalog.PlaynitePlugin
 
 ### ビルドと単体テスト
 
-- `dotnet test tests/LocalGameCatalog.Tests/LocalGameCatalog.Tests.csproj`: 15 成功、0 失敗。
+- `dotnet test tests/LocalGameCatalog.Tests/LocalGameCatalog.Tests.csproj`: 17 成功、0 失敗。
 - プラグインプロジェクトは、インストール済み Playnite SDK 6.18 に対して警告 0 でビルドできた。
 - SDK は .NET SDK 11.0.100-rc.1 です。NETSDK1057 のプレビュー利用メッセージが出ます。
 

@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 
 namespace DlsiteCollector;
@@ -47,7 +48,18 @@ internal static class DlsiteProductParser
     public static bool TryParse(string json, string requestedId, string fallbackSiteId, out DlsiteProduct? product)
     {
         product = null;
-        using var document = JsonDocument.Parse(json);
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        using (document)
+        {
         if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() == 0)
         {
             return false;
@@ -92,6 +104,7 @@ internal static class DlsiteProductParser
             string.IsNullOrWhiteSpace(imageExtension) ? null : imageExtension.Trim().TrimStart('.'),
             "https://www.dlsite.com/" + siteId + "/work/=/product_id/" + requestedId + ".html");
         return true;
+        }
     }
 
     private static string? ReadString(JsonElement element, string name)
@@ -127,6 +140,8 @@ internal static class DlsiteProductParser
         }
 
         var date = value.Substring(0, 10);
-        return date[4] == '-' && date[7] == '-' ? date : null;
+        return DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _)
+            ? date
+            : null;
     }
 }

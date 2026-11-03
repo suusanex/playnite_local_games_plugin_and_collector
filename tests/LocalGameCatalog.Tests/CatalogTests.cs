@@ -54,6 +54,12 @@ public class CatalogTests
         var mismatched = Game("RJ01234567", "名前", "https://example.test/rj", "media/dlsite/RJ01234567/cover.jpg", null, null);
         mismatched.Id = "dlsite:RJ00000000";
         Assert.Throws<CatalogValidationException>(() => CatalogValidation.EnsureValid(mismatched));
+
+        var impossibleDay = Game("RJ01234567", "名前", "https://example.test/rj", "", null, "2024-02-31");
+        Assert.Throws<CatalogValidationException>(() => CatalogValidation.EnsureValid(impossibleDay));
+
+        var leapDay = Game("RJ01234567", "名前", "https://example.test/rj", "", null, "2024-02-29");
+        CatalogValidation.EnsureValid(leapDay);
     }
 
     [Fact]
