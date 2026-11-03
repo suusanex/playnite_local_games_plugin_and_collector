@@ -1,0 +1,7 @@
+Id: LocalGameCatalog
+Name: Local Game Catalog
+Author: suusanex
+Version: 1.0
+Module: LocalGameCatalog.PlaynitePlugin.dll
+Type: GameLibrary
+Icon: icon.png
