@@ -1,0 +1,9 @@
+<UserControl x:Class="LocalGameCatalog.PlaynitePlugin.LocalCatalogSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             MinWidth="420">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,6" Text="カタログ JSONL のパス" />
+        <TextBox Text="{Binding Settings.CatalogPath, UpdateSourceTrigger=PropertyChanged}" />
+    </DockPanel>
+</UserControl>
