@@ -1,0 +1,1 @@
+# playnite_local_games_plugin_and_collector
